@@ -1,9 +1,11 @@
 ﻿using System;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
 using Assets.Scripts.Networks;
 using Assets.Scripts.Objects.Electrical;
 using Assets.Scripts.Objects.Items;
+using BepInEx;
 using UnityEngine;
 
 namespace DeepCoreMods.InfiniteCharge
@@ -17,6 +19,7 @@ namespace DeepCoreMods.InfiniteCharge
         private const int InitialWorldLoadDelayMs = 15000;
         private const int BatteryUpdateIntervalMs = 250;
         private const int InputPollIntervalMs = 50;
+        private const int StreamDeckPollIntervalMs = 250;
 
         // --------------------------------------------------------------
         // Worker Thread
@@ -31,6 +34,19 @@ namespace DeepCoreMods.InfiniteCharge
 
         private static bool _infiniteChargeEnabled = true;
         private static bool _toggleKeyWasDown;
+
+        // --------------------------------------------------------------
+        // Stream Deck Control
+        // --------------------------------------------------------------
+
+        private const string ControlFileName =
+            "DeepCoreMods.InfiniteCharge.control";
+
+        private const string StatusFileName =
+            "DeepCoreMods.InfiniteCharge.status";
+
+        private static string _controlFilePath;
+        private static string _statusFilePath;
 
         // --------------------------------------------------------------
         // Windows Keyboard Input
@@ -50,6 +66,25 @@ namespace DeepCoreMods.InfiniteCharge
                 return;
             }
 
+            // Build the Stream Deck control paths inside:
+            //
+            // BepInEx\config\
+            //
+            _controlFilePath =
+                Path.Combine(
+                    Paths.ConfigPath,
+                    ControlFileName);
+
+            _statusFilePath =
+                Path.Combine(
+                    Paths.ConfigPath,
+                    StatusFileName);
+
+            // Infinite Charge starts ON.
+            _infiniteChargeEnabled = true;
+
+            WriteStatusFile();
+
             _running = true;
 
             _workerThread =
@@ -64,6 +99,12 @@ namespace DeepCoreMods.InfiniteCharge
 
             Plugin.Log.LogInfo(
                 "Infinite Charge worker thread started.");
+
+            Plugin.Log.LogInfo(
+                $"Stream Deck control file: {_controlFilePath}");
+
+            Plugin.Log.LogInfo(
+                $"Stream Deck status file: {_statusFilePath}");
         }
 
         // --------------------------------------------------------------
@@ -81,11 +122,35 @@ namespace DeepCoreMods.InfiniteCharge
             DateTime nextBatteryUpdate =
                 DateTime.UtcNow;
 
+            DateTime nextStreamDeckCheck =
+                DateTime.UtcNow;
+
             while (_running)
             {
                 try
                 {
+                    // --------------------------------------------------
+                    // Physical keyboard toggle
+                    // --------------------------------------------------
+
                     CheckToggleKey();
+
+                    // --------------------------------------------------
+                    // Stream Deck control
+                    // --------------------------------------------------
+
+                    if (DateTime.UtcNow >= nextStreamDeckCheck)
+                    {
+                        nextStreamDeckCheck =
+                            DateTime.UtcNow.AddMilliseconds(
+                                StreamDeckPollIntervalMs);
+
+                        CheckStreamDeckControl();
+                    }
+
+                    // --------------------------------------------------
+                    // Battery charging
+                    // --------------------------------------------------
 
                     if (DateTime.UtcNow >= nextBatteryUpdate)
                     {
@@ -113,7 +178,7 @@ namespace DeepCoreMods.InfiniteCharge
         }
 
         // --------------------------------------------------------------
-        // Toggle Key
+        // Physical Toggle Key
         // --------------------------------------------------------------
 
         private static void CheckToggleKey()
@@ -140,16 +205,147 @@ namespace DeepCoreMods.InfiniteCharge
 
             if (keyDown && !_toggleKeyWasDown)
             {
-                _infiniteChargeEnabled =
-                    !_infiniteChargeEnabled;
-
-                Plugin.Log.LogInfo(
-                    $"Infinite Charge toggled " +
-                    $"{(_infiniteChargeEnabled ? "ON" : "OFF")} " +
-                    $"by {assignedKey}.");
+                SetInfiniteChargeState(
+                    !_infiniteChargeEnabled,
+                    assignedKey.ToString());
             }
 
             _toggleKeyWasDown = keyDown;
+        }
+
+        // --------------------------------------------------------------
+        // Stream Deck Control
+        // --------------------------------------------------------------
+
+        private static void CheckStreamDeckControl()
+        {
+            if (string.IsNullOrWhiteSpace(_controlFilePath))
+            {
+                return;
+            }
+
+            if (!File.Exists(_controlFilePath))
+            {
+                return;
+            }
+
+            try
+            {
+                string command =
+                    File.ReadAllText(_controlFilePath)
+                        .Trim()
+                        .ToUpperInvariant();
+
+                // Delete the command file immediately after reading it.
+                //
+                // This prevents the same command being processed again
+                // on the next polling cycle.
+                File.Delete(_controlFilePath);
+
+                switch (command)
+                {
+                    case "ON":
+
+                        SetInfiniteChargeState(
+                            true,
+                            "Stream Deck");
+
+                        break;
+
+                    case "OFF":
+
+                        SetInfiniteChargeState(
+                            false,
+                            "Stream Deck");
+
+                        break;
+
+                    case "TOGGLE":
+
+                        SetInfiniteChargeState(
+                            !_infiniteChargeEnabled,
+                            "Stream Deck");
+
+                        break;
+
+                    default:
+
+                        Plugin.Log.LogWarning(
+                            $"Unknown Stream Deck command: {command}");
+
+                        break;
+                }
+            }
+            catch (IOException)
+            {
+                // Stream Deck may still be writing the file.
+                //
+                // Ignore this polling cycle and try again shortly.
+            }
+            catch (UnauthorizedAccessException)
+            {
+                Plugin.Log.LogWarning(
+                    "Unable to access Infinite Charge Stream Deck control file.");
+            }
+            catch (Exception ex)
+            {
+                Plugin.Log.LogError(
+                    $"Stream Deck control error: {ex}");
+            }
+        }
+
+        // --------------------------------------------------------------
+        // Change Infinite Charge State
+        // --------------------------------------------------------------
+
+        private static void SetInfiniteChargeState(
+            bool enabled,
+            string source)
+        {
+            if (_infiniteChargeEnabled == enabled)
+            {
+                // Still refresh the status file in case another program
+                // removed or altered it.
+                WriteStatusFile();
+
+                return;
+            }
+
+            _infiniteChargeEnabled =
+                enabled;
+
+            WriteStatusFile();
+
+            Plugin.Log.LogInfo(
+                $"Infinite Charge " +
+                $"{(_infiniteChargeEnabled ? "ON" : "OFF")} " +
+                $"by {source}.");
+        }
+
+        // --------------------------------------------------------------
+        // Status File
+        // --------------------------------------------------------------
+
+        private static void WriteStatusFile()
+        {
+            if (string.IsNullOrWhiteSpace(_statusFilePath))
+            {
+                return;
+            }
+
+            try
+            {
+                File.WriteAllText(
+                    _statusFilePath,
+                    _infiniteChargeEnabled
+                        ? "ON"
+                        : "OFF");
+            }
+            catch (Exception ex)
+            {
+                Plugin.Log.LogWarning(
+                    $"Unable to write Infinite Charge status file: {ex.Message}");
+            }
         }
 
         // --------------------------------------------------------------

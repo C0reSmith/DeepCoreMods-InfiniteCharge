@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ModMetadata xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <Name>DeepCore Mods - Infinite Charge</Name>
+  <Author>C0reSmith</Author>
+  <Version>1.0.1</Version>
+  <Description>Keep Station Batteries and Battery Cells fully charged with a configurable in-game toggle. Requires BepInEx 5 and StationeersLaunchPad.</Description>
+</ModMetadata>

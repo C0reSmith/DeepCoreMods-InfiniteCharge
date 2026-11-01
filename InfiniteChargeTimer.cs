@@ -184,7 +184,7 @@ namespace DeepCoreMods.InfiniteCharge
         private static void CheckToggleKey()
         {
             KeyCode assignedKey =
-                KeyCode.F7;
+                KeyCode.F6;
 
             if (StationeersKeybind.ToggleKeyItem != null)
             {

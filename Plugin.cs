@@ -1,5 +1,7 @@
 ﻿using System.Reflection;
 using BepInEx;
+using HarmonyLib;
+
 
 namespace DeepCoreMods.InfiniteCharge
 {
@@ -19,6 +21,7 @@ namespace DeepCoreMods.InfiniteCharge
             "1.0.1";
 
         internal static BepInEx.Logging.ManualLogSource Log;
+        private Harmony _harmony;
 
         private void Awake()
         {
@@ -33,6 +36,15 @@ namespace DeepCoreMods.InfiniteCharge
 
             Logger.LogInfo(
                 $"Plugin DLL: {Assembly.GetExecutingAssembly().Location}");
+
+            // ----------------------------------------------------------
+            // Register Harmony patches
+            // ----------------------------------------------------------
+
+            _harmony = new Harmony(PluginGuid);
+            _harmony.PatchAll(Assembly.GetExecutingAssembly());
+
+            Logger.LogInfo("Harmony patches registered.");
 
             // ----------------------------------------------------------
             // Register Stationeers keybinding

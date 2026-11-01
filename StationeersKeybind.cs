@@ -1,4 +1,5 @@
-﻿using Assets.Scripts;
+﻿
+using Assets.Scripts;
 using Assets.Scripts.UI;
 using System;
 using System.Collections.Generic;
@@ -48,14 +49,18 @@ namespace DeepCoreMods.InfiniteCharge
 
                 KeyItem toggleKey;
 
+               
+
                 if (!KeyManager.KeyItemLookup.TryGetValue(
                         KeyName,
                         out toggleKey))
                 {
+                   
+
                     toggleKey =
                         new KeyItem(
                             KeyName,
-                            KeyCode.F7,
+                            KeyCode.F6,
                             false);
 
                     KeyManager.KeyItemLookup[KeyName] =
@@ -68,6 +73,13 @@ namespace DeepCoreMods.InfiniteCharge
 
                     Plugin.Log.LogInfo(
                         "Created Infinite Charge KeyItem.");
+                }
+                if (!KeyManager.AllKeys.Contains(toggleKey))
+                {
+                    KeyManager.AllKeys.Add(toggleKey);
+
+                    Plugin.Log.LogInfo(
+                        "Restored missing Infinite Charge KeyItem to AllKeys.");
                 }
 
                 ToggleKeyItem =
@@ -100,8 +112,7 @@ namespace DeepCoreMods.InfiniteCharge
                 ControlsAssignment.RefreshState();
 
                 Plugin.Log.LogInfo(
-                    $"Stationeers keybinding registration complete. "
-                    );
+                    "Stationeers keybinding registration complete.");
             }
             catch (Exception ex)
             {

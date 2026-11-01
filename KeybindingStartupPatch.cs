@@ -18,68 +18,65 @@ namespace DeepCoreMods.InfiniteCharge
         }
     }
 
+
     [HarmonyPatch(typeof(Settings), "LoadSettings")]
     internal static class SettingsLoadedPatch
     {
+        internal static bool HasLoadedSettings { get; private set; }
+
         [HarmonyPostfix]
         private static void Postfix()
         {
-            Plugin.Log.LogInfo(
-                "Stationeers LoadSettings completed.");
-
-            Plugin.Log.LogInfo(
-                "Stationeers settings path: " +
-                SettingData.Path);
-
             StationeersKeybind.Register();
 
-            if (StationeersKeybind.ToggleKeyItem != null)
-            {
-                Plugin.Log.LogInfo(
-                    "Infinite Charge key after settings load: " +
-                    StationeersKeybind.ToggleKeyItem.Key);
-            }
-
-            var savedKey = Settings.CurrentData?.KeyList?
-    .FirstOrDefault(k =>
-        k != null &&
-        k.Name == StationeersKeybind.KeyName);
-
-            if (savedKey != null)
-            {
-                Plugin.Log.LogInfo(
-                    "Infinite Charge key in saved settings: " +
-                    savedKey.Key);
-
-                Plugin.Log.LogInfo(
-                    "Saved key and active key are same object: " +
-                    object.ReferenceEquals(
-                        savedKey,
-                        StationeersKeybind.ToggleKeyItem));
-            }
-            else
-            {
-                Plugin.Log.LogWarning(
-                    "Infinite Charge key not found in saved settings.");
-            }
-        }
-    }
-    [HarmonyPatch(typeof(SettingData), "Load")]
-    internal static class SettingDataLoadPatch
-    {
-        [HarmonyPostfix]
-        private static void Postfix(SettingData __result)
-        {
-            var savedKey = __result?.KeyList?
-                .FirstOrDefault(k =>
-                    k != null &&
-                    k.Name == StationeersKeybind.KeyName);
+            HasLoadedSettings = true;
 
             Plugin.Log.LogInfo(
-                "Infinite Charge key immediately after XML load: " +
-                (savedKey != null
-                    ? savedKey.Key.ToString()
-                    : "NOT FOUND"));
+                "Infinite Charge settings loaded successfully.");
         }
     }
+    [HarmonyPatch(typeof(Settings), "SaveSettings")]
+    internal static class EarlySettingsSavePatch
+    {
+        [HarmonyPrefix]
+        private static void Prefix()
+        {
+            if (SettingsLoadedPatch.HasLoadedSettings)
+                return;
+
+            try
+            {
+                KeyItem activeKey =
+                    StationeersKeybind.ToggleKeyItem;
+
+                if (activeKey == null)
+                    return;
+
+                SettingData savedSettings = SettingData.Load();
+
+                if (savedSettings?.KeyList == null)
+                    return;
+
+                var savedKey = savedSettings.KeyList
+                    .FirstOrDefault(k =>
+                        k != null &&
+                        k.Name == StationeersKeybind.KeyName);
+
+                if (savedKey == null)
+                    return;
+
+                activeKey.Key = savedKey.Key;
+
+                Plugin.Log.LogInfo(
+                    "Protected Infinite Charge key before early save: " +
+                    activeKey.Key);
+            }
+            catch (System.Exception ex)
+            {
+                Plugin.Log.LogWarning(
+                    "Early keybinding protection failed: " + ex);
+            }
+        }
+    }
+
 }
